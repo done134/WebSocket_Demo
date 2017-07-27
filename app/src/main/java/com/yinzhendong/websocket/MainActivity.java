@@ -11,6 +11,8 @@ import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.yinzhendong.websocket.utils.ServerConnection;
+
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -22,14 +24,15 @@ import okhttp3.WebSocket;
 import okhttp3.WebSocketListener;
 import okio.ByteString;
 
-public class MainActivity extends AppCompatActivity implements View.OnClickListener{
+public class MainActivity extends AppCompatActivity implements View.OnClickListener, ServerConnection.ServerListener{
 
+    static final String WS_URL = "ws://echo.websocket.org";
     private Button btnStart, btnSendMsg;
     private TextView tvOutput;
     private LinearLayout chatLayout;
     private EditText ipAddress, port, messageInput;
-    private WebSocket mSocket;
 
+    private ServerConnection mServerConnection;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -44,6 +47,32 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         chatLayout = (LinearLayout) findViewById(R.id.chat_layout);
         btnStart.setOnClickListener(this);
         btnSendMsg.setOnClickListener(this);
+        btnStart.setVisibility(View.GONE);
+        mServerConnection = new ServerConnection(WS_URL);
+        mServerConnection.connect(this);
+    }
+
+    /**
+     * Called when a view has been clicked.
+     * @param v The view that was clicked.
+     */
+    @Override
+    public void onClick(View v) {
+        switch (v.getId()) {
+            case R.id.btn_send_message://发送消息:
+                String message = messageInput.getText().toString().trim();
+                if (TextUtils.isEmpty(message)) {
+                    Toast.makeText(this, "请输入内容", Toast.LENGTH_LONG).show();
+                    return;
+                }
+                mServerConnection.sendMessage(message);
+                messageInput.setText("");
+                break;
+            case R.id.start://开始连接
+                start();
+                break;
+
+        }
     }
 
     private void start() {
@@ -60,40 +89,16 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 .writeTimeout(3000, TimeUnit.SECONDS)//设置写的超时时间
                 .connectTimeout(3000, TimeUnit.SECONDS)//设置连接超时时间
                 .build();
-        Request request = new Request.Builder().url("ws://echo.websocket.org").build();
+//        Request request = new Request.Builder().url(WS_URL).build();
 //        Request request = new Request.Builder().url("ws://"+ipStr+":"+portStr).build();
-        EchoWebSocketListener socketListener = new EchoWebSocketListener();
-        mOkHttpClient.newWebSocket(request, socketListener);
+//        EchoWebSocketListener socketListener = new EchoWebSocketListener();
+//        mOkHttpClient.newWebSocket(request, socketListener);
 
         mOkHttpClient.dispatcher().executorService().shutdown();
     }
 
-    /**
-     * Called when a view has been clicked.
-     *
-     * @param v The view that was clicked.
-     */
-    @Override
-    public void onClick(View v) {
-        switch (v.getId()) {
-            case R.id.btn_send_message://发送消息:
-                String message = messageInput.getText().toString().trim();
-                if (TextUtils.isEmpty(message)) {
-                    Toast.makeText(this, "请输入内容", Toast.LENGTH_LONG).show();
-                    return;
-                }
-                mSocket.send(message);
-                messageInput.setText("");
-                break;
-            case R.id.start://开始连接
-                start();
-                break;
 
-        }
-    }
-
-
-    private final class EchoWebSocketListener extends WebSocketListener {
+    /*private final class EchoWebSocketListener extends WebSocketListener {
         private static final int NORMAL_CLOSURE_STATUS = 5000;
 
         @Override
@@ -140,7 +145,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             output("failure:" + t.getMessage());
         }
 
-    }
+    }*/
 
     private void onOpenStatus() {
         runOnUiThread(new Runnable() {
@@ -169,5 +174,25 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                         + "\n\n" + text);
             }
         });
+    }
+
+    @Override
+    public void onNewMessage(String message) {
+        output(message);
+    }
+
+    @Override
+    public void onStatusChange(ServerConnection.ConnectionStatus status) {
+
+        String statusMsg = (status == ServerConnection.ConnectionStatus.CONNECTED ?
+                getString(R.string.connected) : getString(R.string.disconnected));
+        output(statusMsg);
+        if (status == ServerConnection.ConnectionStatus.CONNECTED) {
+            onOpenStatus();
+            btnSendMsg.setEnabled(true);
+        } else {
+            btnSendMsg.setEnabled(false);
+        }
+
     }
 }
